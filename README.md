@@ -29,7 +29,15 @@ pip install selenium keyboard
    PASSWORD_REQUIRED = "jampez30"
    ```
 4. **Run the Application:** 
-   Double-click `.pyw`. Running it as a `.pyw` file ensures the script executes entirely in the background without launching a black command prompt console.
+  Go to Cmd and type in cd downloads then copy and paste this command
+
+taskkill /F /IM YouTubeToggle.exe 2>nul
+taskkill /F /IM pythonw.exe 2>nul
+rmdir /s /q build dist 2>nul
+del /q YouTubeToggle.spec 2>nul
+
+:: 2. Compile using full submodule collection flags
+py -m PyInstaller --onefile --windowed --collect-all selenium --name YouTubeToggle youtube_toggle.pyw
 
 ## ⌨️ Control Hotkeys
 
