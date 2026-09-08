@@ -1,0 +1,249 @@
+import time
+import ctypes
+import os
+import sys
+import winreg
+import signal
+import atexit
+import tkinter as tk
+from tkinter import simpledialog
+from selenium import webdriver
+import keyboard
+import threading
+
+# Win32 API constants for window manipulation
+GWL_EXSTYLE = -20
+WS_EX_TOOLWINDOW = 0x00000080  # Removes window from Alt+Tab switcher
+SW_HIDE = 0                   # Hides window completely from taskbar & screen
+SW_SHOW = 5                   # Restores window visibility
+
+# Topmost Window Z-Order placement constants
+HWND_TOPMOST = -1
+SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
+SWP_SHOWWINDOW = 0x0040
+
+user32 = ctypes.windll.user32
+
+# Track window state and application lifecycle
+is_hidden = False
+PASSWORD_REQUIRED = "jampez30"
+stop_event = threading.Event()
+
+
+def ensure_persistence():
+    """Registers the running script within the Windows Registry to ensure it launches on system boot."""
+    try:
+        # Determine if running as a raw script or compiled executable (.exe)
+        if getattr(sys, 'frozen', False):
+            script_path = sys.executable
+        else:
+            # If running as a .py script, ensure it runs via the pythonw executable (which suppresses the console window)
+            python_exe = sys.executable.replace("python.exe", "pythonw.exe")
+            script_path = f'"{python_exe}" "{os.path.abspath(sys.argv[0])}"'
+
+        # Target the Current User Registry Run key (does not require Administrator privileges)
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        app_name = "YouTubeFocusMonitor"  # Registry identifier key
+
+        # Open the key and write the path value
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, script_path)
+        winreg.CloseKey(key)
+    except Exception:
+        # Fail silently if registry modification is blocked by environment policies
+        pass
+
+
+# 1. Register application to run automatically on system boot
+ensure_persistence()
+
+# 2. Network safety delay: Give the operating system time to establish an internet connection at boot
+time.sleep(10)
+
+# --- ANTI-DETECTION BROWSER CONFIGURATION ---
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument("--no-first-run")
+chrome_options.add_argument("--no-default-browser-check")
+
+# Hide Selenium's automation signatures to bypass YouTube's bot tracking
+chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+chrome_options.add_experimental_option("useAutomationExtension", False)
+
+# Ensure smooth video decoding stream authorization
+chrome_options.add_argument("--autoplay-policy=no-user-gesture-required")
+chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+
+# Start Chrome
+driver = webdriver.Chrome(options=chrome_options)
+
+# Dynamically patch the runtime context to eliminate bot flags
+driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+    "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+})
+
+# Open YouTube safely
+driver.get("https://youtube.com")
+
+# Brief pause to ensure the window handle is fully registered
+time.sleep(2)
+
+# --- TRACK PROCESS IDS AGGRESSIVELY FOR CLEANUP ---
+driver_pid = driver.service.process.pid
+browser_pid = None
+try:
+    browser_pid = driver.capabilities.get("chrome", {}).get("userDataDir", "").split("chrome_bits")
+except Exception:
+    pass
+
+# --- HWND RETRIEVAL VIA BROWSER PID MATCHING ---
+hwnd = None
+def enum_windows_callback(handle, extra):
+    global hwnd
+    lp_pid = ctypes.c_ulong()
+    user32.GetWindowThreadProcessId(handle, ctypes.byref(lp_pid))
+    
+    if lp_pid.value == driver_pid or (browser_pid and lp_pid.value == browser_pid):
+        title = ctypes.create_unicode_buffer(255)
+        user32.GetWindowTextW(handle, title, 255)
+        if "YouTube" in title.value or "Chrome" in title.value:
+            hwnd = handle
+            return False 
+    return True
+
+WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+user32.EnumWindows(WNDENUMPROC(enum_windows_callback), 0)
+
+if not hwnd:
+    hwnd = user32.GetForegroundWindow()
+
+# Remove window from Alt + Tab list securely
+if hwnd:
+    current_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, current_style | WS_EX_TOOLWINDOW)
+
+
+def cleanup_chrome():
+    """Forcibly closes the ChromeDriver, the browser process, and ALL spawned child tabs/workers."""
+    try:
+        driver.quit()
+    except Exception:
+        pass
+    
+    try:
+        if driver_pid:
+            os.system(f"taskkill /F /T /PID {driver_pid} >nul 2>&1")
+    except Exception:
+        pass
+
+
+def emergency_exit():
+    """Triggered via secret hotkey combo to instantly kill the app and all windows."""
+    cleanup_chrome()
+    stop_event.set()
+    os._exit(0)
+
+
+# Register cleanup functions for system hooks
+atexit.register(cleanup_chrome)
+
+def signal_handler(signum, frame):
+    cleanup_chrome()
+    os._exit(0)
+
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+
+def request_password():
+    """Creates a temporary, focused dialog box to prompt for the password."""
+    root = tk.Tk()
+    root.withdraw()  
+    root.attributes("-topmost", True)  
+    root.update()
+    
+    user_input = simpledialog.askstring("Access Required", "Enter password to unhide:", show='*', parent=root)
+    root.destroy()
+    return user_input
+
+
+def hide_window():
+    """Internal logic to instantly hide, pause, and mute the browser."""
+    global is_hidden
+    try:
+        # Hard mute the HTML5 browser page context immediately
+        driver.execute_script('const videos = document.querySelectorAll("video"); videos.forEach(v => { v.muted = true; v.pause(); });')
+    except Exception:
+        pass  
+
+    # Hide from screen and taskbar 
+    user32.ShowWindow(hwnd, SW_HIDE) 
+    is_hidden = True
+
+
+def toggle_window_visibility(): 
+    global is_hidden 
+    if not hwnd:
+        return
+
+    if not is_hidden: 
+        hide_window()
+    else:
+        # --- PASSWORD CHECK BEFORE UNHIDING ---
+        entered_password = request_password()
+        if entered_password != PASSWORD_REQUIRED:
+            return  
+
+        # 1. Force the window to be TOPMOST
+        user32.SetWindowPos(
+            hwnd, 
+            HWND_TOPMOST, 
+            0, 0, 0, 0, 
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+        )
+        
+        # --- UNMUTE AUDIO WHEN UNHIDING ---
+        try:
+            driver.execute_script('const videos = document.querySelectorAll("video"); videos.forEach(v => { v.muted = false; });')
+        except Exception:
+            pass
+
+        # 2. Focus and pull to foreground
+        user32.ShowWindow(hwnd, SW_SHOW) 
+        user32.SetForegroundWindow(hwnd) 
+        is_hidden = False
+
+
+def focus_monitor_loop():
+    """Background loop that forces an automatic hide sequence if someone switches windows."""
+    global is_hidden
+    while not stop_event.is_set():
+        if hwnd and not is_hidden:
+            active_hwnd = user32.GetForegroundWindow()
+            # If the user clicks away, presses Alt+Tab, or another app steals focus
+            if active_hwnd != hwnd and active_hwnd != 0:
+                # Give it a fraction of a millisecond to verify it wasn't just a brief system lag
+                time.sleep(0.05)
+                if user32.GetForegroundWindow() != hwnd:
+                    hide_window()
+        time.sleep(0.1)
+
+
+# Bind hotkeys
+keyboard.add_hotkey('alt+h', toggle_window_visibility)
+keyboard.add_hotkey('alt+shift+q', emergency_exit)  # Silent Emergency Kill
+
+# Start the automated focus tracking thread
+monitor_thread = threading.Thread(target=focus_monitor_loop, daemon=True)
+monitor_thread.start()
+
+# Keep-alive loop
+try: 
+    while not stop_event.is_set():
+        time.sleep(0.3)
+except (KeyboardInterrupt, SystemExit):
+    cleanup_chrome()
+
+
+
