@@ -23,12 +23,13 @@ pip install selenium keyboard
 ## 🛠️ Installation & Setup
 
 1. **Clone or Download the Repository:** Place all project files in a dedicated local directory.
-2. **Review Configuration:** Open `youtube_toggle` to view or modify the default password configuration:
+2. Make Sure you Save it as a .pyw
+3. **Review Configuration:** Open `youtube_toggle` to view or modify the default password configuration:
    ```python
    PASSWORD_REQUIRED = "jampez30"
    ```
-3. **Run the Application:** 
-   Double-click `main.pyw`. Running it as a `.pyw` file ensures the script executes entirely in the background without launching a black command prompt console.
+4. **Run the Application:** 
+   Double-click `.pyw`. Running it as a `.pyw` file ensures the script executes entirely in the background without launching a black command prompt console.
 
 ## ⌨️ Control Hotkeys
 
