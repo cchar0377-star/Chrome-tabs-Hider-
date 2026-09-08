@@ -23,21 +23,21 @@ pip install selenium keyboard
 ## 🛠️ Installation & Setup
 
 1. **Clone or Download the Repository:** Place all project files in a dedicated local directory.
-2. Make Sure you Save it as a .pyw
-3. **Review Configuration:** Open `youtube_toggle` to view or modify the default password configuration:
+2. Make Sure you Save it as a .pyw(IMPORTANT MAKE SURE YOU DON'T SAVE IT IN A FOLDER)
+3. **Review Configuration:** Open `The name you changed to or youtube_toggle` to view or modify the default password configuration:
    ```python
    PASSWORD_REQUIRED = "jampez30"
    ```
 4. **Run the Application:** 
   Go to Cmd and type in cd downloads then copy and paste this command
 
-taskkill /F /IM YouTubeToggle.exe 2>nul
+taskkill /F /IM "Name of fil Goes here ".exe 2>nul
 taskkill /F /IM pythonw.exe 2>nul
 rmdir /s /q build dist 2>nul
-del /q YouTubeToggle.spec 2>nul
+del /q "Name of Flie Goes here".spec 2>nul
 
 :: 2. Compile using full submodule collection flags
-py -m PyInstaller --onefile --windowed --collect-all selenium --name YouTubeToggle youtube_toggle.pyw
+py -m PyInstaller --onefile --windowed --collect-all selenium --name "Name of File goes here" "Name of File goes here ".pyw
 
 ## ⌨️ Control Hotkeys
 
