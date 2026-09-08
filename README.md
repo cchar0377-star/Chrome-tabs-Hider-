@@ -37,7 +37,11 @@ rmdir /s /q build dist 2>nul
 del /q "Name of Flie Goes here".spec 2>nul
 
 :: 2. Compile using full submodule collection flags
-py -m PyInstaller --onefile --windowed --collect-all selenium --name "Name of File goes here" "Name of File goes here ".pyw
+py -m PyInstaller --onefile --windowed --collect-all selenium --name "Name of File goes here" "Name of File goes here ".pywmake
+
+Make sure to remove the "
+
+
 
 ## ⌨️ Control Hotkeys
 
