@@ -8,7 +8,7 @@ A lightweight, automated background utility designed to manage browser visibilit
 * **System Startup Persistence:** Automatically registers with the Windows Registry (`CurrentVersion\Run`) to remain active across system boots and unexpected restarts.
 * **Stealth Engineering:** Strips automation signatures and patches dynamic browser flags to avoid tracking, while safely purging the process from the standard `Alt + Tab` switcher.
 * **Access Control Barrier:** Employs a secure password challenge window before permitting the hidden environment to be pulled back to the foreground.
-* **Silent Emergency Shutdown:** Provides discrete system hooks (`Alt + Shift + Q`) to instantly kill all background drivers and web processes without generating alerts.
+* **Silent Emergency Shutdown:** Provides discrete system hooks (`Alt + Shift + Q`) to instantly kill all background drivers and web processes without generating alerts.(Note: It won't kill all of hte processes it will only kill the processes that it made)
 
 ## 📦 Prerequisites
 
