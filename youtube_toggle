@@ -1,3 +1,4 @@
+
 import time
 import ctypes
 import os
@@ -84,10 +85,22 @@ driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
 })
 
 # Open YouTube safely
+# Open the target page
 driver.get("https://youtube.com")
 
-# Brief pause to ensure the window handle is fully registered
+# Allow the page and title to load completely
 time.sleep(2)
+
+# Retrieve the exact runtime title from the browser
+current_title = driver.title
+
+# Locate the window handle directly using the exact title string
+hwnd = user32.FindWindowW(None, current_title)
+
+# Fallback method if FindWindowW returns zero
+if not hwnd:
+    hwnd = user32.GetForegroundWindow()
+
 
 # --- TRACK PROCESS IDS AGGRESSIVELY FOR CLEANUP ---
 driver_pid = driver.service.process.pid
@@ -97,26 +110,6 @@ try:
 except Exception:
     pass
 
-# --- HWND RETRIEVAL VIA BROWSER PID MATCHING ---
-hwnd = None
-def enum_windows_callback(handle, extra):
-    global hwnd
-    lp_pid = ctypes.c_ulong()
-    user32.GetWindowThreadProcessId(handle, ctypes.byref(lp_pid))
-    
-    if lp_pid.value == driver_pid or (browser_pid and lp_pid.value == browser_pid):
-        title = ctypes.create_unicode_buffer(255)
-        user32.GetWindowTextW(handle, title, 255)
-        if "YouTube" in title.value or "Chrome" in title.value:
-            hwnd = handle
-            return False 
-    return True
-
-WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-user32.EnumWindows(WNDENUMPROC(enum_windows_callback), 0)
-
-if not hwnd:
-    hwnd = user32.GetForegroundWindow()
 
 # Remove window from Alt + Tab list securely
 if hwnd:
