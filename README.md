@@ -1,6 +1,6 @@
 ## Hide Browser
 
-UPDATING... Please wait(We are fixing a major issue.. Be delayed till 12:12PM)
+Welcome To update 1.2.0!
 
 A lightweight, automated background utility designed to manage browser visibility dynamically. It enforces strict window focus, instantly hiding and muting content the moment attention shifts, and securely handles restoration through authorization.
 
