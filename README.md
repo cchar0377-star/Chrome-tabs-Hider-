@@ -33,14 +33,29 @@ pip install selenium keyboard
    ```
 4. **Run the Application:** 
   Go to Cmd and type in cd downloads then copy and paste this command
+@echo off
+echo [1/3] Terminating active processes...
+taskkill /F /IM "Whatever you named it".exe >nul 2>&1
+taskkill /F /IM chromedriver.exe >nul 2>&1
 
-taskkill /F /IM "Name of fil Goes here ".exe 2>nul
-taskkill /F /IM pythonw.exe 2>nul
-rmdir /s /q build dist 2>nul
-del /q "Name of Flie Goes here".spec 2>nul
+cd downloads 
 
-:: 2. Compile using full submodule collection flags
-py -m PyInstaller --onefile --windowed --collect-all selenium --name "Name of File goes here" "Name of File goes here ".pywmake
+echo [2/3] Clearing previous build artifacts...
+if exist build rmdir /s /q build
+if exist dist rmdir /s /q dist
+
+echo [3/3] Building executable from existing spec...
+py -m PyInstaller --clean "Whatever you named it".spec
+
+if %ERRORLEVEL% EQU 0 (
+    echo.
+    echo Compilation successful! Executable located in \dist\
+) else (
+    echo.
+    echo Compilation failed. Check the output log above.
+)
+
+pause
 
 Make sure to remove the "
 
