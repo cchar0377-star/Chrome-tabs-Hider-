@@ -33,6 +33,8 @@ pip install selenium keyboard
    ```
 4. **Run the Application:** 
   Go to Cmd and type in cd downloads then copy and paste this command
+
+
 @echo off
 echo [1/3] Terminating active processes...
 taskkill /F /IM "Whatever you named it".exe >nul 2>&1
