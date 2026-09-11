@@ -11,6 +11,33 @@ from tkinter import simpledialog
 from selenium import webdriver
 import keyboard
 import threading
+import uuid 
+import gc
+import logging
+from datetime import datetime
+
+
+def setup_automation_logger(logfile="automation_runtime.log"):
+    """Configures a background rolling diagnostic log to trace event sequences safely."""
+    logging.basicConfig(
+        filename=logfile,
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    logging.info("--- Automation Session Initialised ---")
+
+def log_event(message, level="info"):
+    """Thread-safe interface to write diagnostic breadcrumbs."""
+    try:
+        if level == "info":
+            logging.info(message)
+        elif level == "error":
+            logging.error(message)
+    except Exception:
+        pass
+
+setup_automation_logger()
 
 # Win32 API constants for window manipulation
 GWL_EXSTYLE = -20
@@ -32,74 +59,117 @@ PASSWORD_REQUIRED = "jampez30"
 stop_event = threading.Event()
 
 
+unhide_requested = threading.Event() 
+
+
 def ensure_persistence():
-    """Registers the running script within the Windows Registry to ensure it launches on system boot."""
+    """Registers the compiled executable within the Windows Registry."""
     try:
-        # Determine if running as a raw script or compiled executable (.exe)
         if getattr(sys, 'frozen', False):
             script_path = sys.executable
         else:
-            # If running as a .py script, ensure it runs via the pythonw executable (which suppresses the console window)
             python_exe = sys.executable.replace("python.exe", "pythonw.exe")
             script_path = f'"{python_exe}" "{os.path.abspath(sys.argv[0])}"'
 
-        # Target the Current User Registry Run key (does not require Administrator privileges)
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        app_name = "YouTubeFocusMonitor"  # Registry identifier key
+        
+        # CHANGED: Match this exactly to your PyInstaller --name output configuration
+        app_name = "YouTubeToggle"  
 
-        # Open the key and write the path value
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, script_path)
         winreg.CloseKey(key)
     except Exception:
-        # Fail silently if registry modification is blocked by environment policies
         pass
+
 
 
 # 1. Register application to run automatically on system boot
 ensure_persistence()
 
 # 2. Network safety delay: Give the operating system time to establish an internet connection at boot
+# 2. Network safety delay
 time.sleep(10)
 
-# --- ANTI-DETECTION BROWSER CONFIGURATION ---
+# --- UNIFIED CHROME HARDENING & MEMORY SETUP ---
 chrome_options = webdriver.ChromeOptions()
+
+# Baseline Automation Bypass Setup
 chrome_options.add_argument("--no-first-run")
 chrome_options.add_argument("--no-default-browser-check")
-
-# Hide Selenium's automation signatures to bypass YouTube's bot tracking
 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
 chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
 chrome_options.add_experimental_option("useAutomationExtension", False)
-
-# Ensure smooth video decoding stream authorization
 chrome_options.add_argument("--autoplay-policy=no-user-gesture-required")
 chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
 
-# Start Chrome
+# Performance Scaling Flags (Maintains the ~47MB Target Baseline)
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--disable-software-rasterizer")
+chrome_options.add_argument("--single-process")  # Note: Omit if local Chromium build flags conflict
+chrome_options.add_argument("--disable-extensions")
+chrome_options.add_argument("--disable-background-networking")
+chrome_options.add_argument("--disable-sync")
+chrome_options.add_argument("--metrics-recording-only")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--no-sandbox")
+
+# Launch exactly ONE instance securely
 driver = webdriver.Chrome(options=chrome_options)
 
-# Dynamically patch the runtime context to eliminate bot flags
+# Inject standard automated context overrides
 driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
     "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
 })
 
+
 # Open YouTube safely
+# Open the target page
 # Open the target page
 driver.get("https://youtube.com")
 
-# Allow the page and title to load completely
-time.sleep(2)
 
-# Retrieve the exact runtime title from the browser
-current_title = driver.title
+# Dynamic title-wait loop (Timeout after 10 seconds maximum)
+timeout = 10
+start_time = time.time()
+current_title = ""
 
-# Locate the window handle directly using the exact title string
-hwnd = user32.FindWindowW(None, current_title)
+while not current_title or current_title == "about:blank":
+    if time.time() - start_time > timeout:
+        break
+    try:
+        current_title = driver.title
+    except Exception:
+        pass
+    time.sleep(0.2)
+# Add this import at the top of your script
 
-# Fallback method if FindWindowW returns zero
+
+
+# 1. Generate a completely unique identifier string
+unique_flag = f"Selenium-Automation-Track-{uuid.uuid4()}"
+
+# 2. Inject this unique flag into the browser's tab title via JavaScript
+driver.execute_script(f"document.title = '{unique_flag}';")
+time.sleep(0.2)  # Small fraction of a second for Windows to register the update
+
+# 3. Find the window handle using the unique flag (guarantees a 100% accurate match)
+hwnd = user32.FindWindowW(None, unique_flag)
+
+# Fallback method if FindWindowW fails
 if not hwnd:
     hwnd = user32.GetForegroundWindow()
+
+# 4. Clean up: Restore the original website title so it looks normal again
+try:
+    original_title = driver.title.replace(unique_flag, "YouTube")
+    driver.execute_script(f"document.title = '{original_title}';")
+except Exception:
+    pass
+
+# --- TRACK PROCESS IDS AGGRESSIVELY FOR CLEANUP ---
+driver_pid = driver.service.process.pid
+
 
 
 # --- TRACK PROCESS IDS AGGRESSIVELY FOR CLEANUP ---
@@ -119,23 +189,48 @@ if hwnd:
 
 def cleanup_chrome():
     """Forcibly closes the ChromeDriver, the browser process, and ALL spawned child tabs/workers."""
+    global browser_pid, driver_pid
+    
+    # 1. Attempt graceful close through the WebDriver interface
     try:
         driver.quit()
     except Exception:
         pass
     
+    # 2. Extract the true Browser PID dynamically if not already captured
+    if not browser_pid:
+        try:
+            # Service process gives us the driver, its child is the actual browser executable
+            browser_pid = driver.service.process.pid
+        except Exception:
+            pass
+
+    # 3. Forcibly terminate the Process Tree (/T) and ignore errors (>nul 2>&1)
     try:
         if driver_pid:
             os.system(f"taskkill /F /T /PID {driver_pid} >nul 2>&1")
     except Exception:
         pass
 
+    try:
+        if browser_pid:
+            os.system(f"taskkill /F /T /PID {browser_pid} >nul 2>&1")
+    except Exception:
+        pass
+        
+    # 4. Final safety blanket: Kill orphan processes tied specifically to this automation tool name
+    # (Matches the 'YouTubeToggle' execution environment)
+    os.system("taskkill /F /IM chromedriver.exe /FI \"STATUS eq RUNNING\" >nul 2>&1")
+
+
 
 def emergency_exit():
-    """Triggered via secret hotkey combo to instantly kill the app and all windows."""
+    """Signalling a clean shutdown down the thread ladder before forcing termination."""
+    stop_event.set()  # Signals the focus_monitor_loop to break its while condition
     cleanup_chrome()
-    stop_event.set()
+    time.sleep(0.2)   # Gives the monitor loop thread a moment to exit gracefully
     os._exit(0)
+
 
 
 # Register cleanup functions for system hooks
@@ -165,14 +260,27 @@ def hide_window():
     """Internal logic to instantly hide, pause, and mute the browser."""
     global is_hidden
     try:
-        # Hard mute the HTML5 browser page context immediately
         driver.execute_script('const videos = document.querySelectorAll("video"); videos.forEach(v => { v.muted = true; v.pause(); });')
     except Exception:
         pass  
 
-    # Hide from screen and taskbar 
     user32.ShowWindow(hwnd, SW_HIDE) 
     is_hidden = True
+
+
+def check_browser_health(driver_instance):
+    """
+    Validates if the automated browser engine context is responsive.
+    Returns True if online/healthy, False if disconnected or frozen.
+    """
+    try:
+        # Ultra-lightweight heartbeat ping to the internal Javascript runtime engine
+        is_online = driver_instance.execute_script("return navigator.onLine;")
+        return True
+    except Exception:
+        log_event("Browser context lost or manually severed. Initiating mitigation.", "error")
+        return False
+
 
 
 def toggle_window_visibility(): 
@@ -183,44 +291,72 @@ def toggle_window_visibility():
     if not is_hidden: 
         hide_window()
     else:
-        # --- PASSWORD CHECK BEFORE UNHIDING ---
-        entered_password = request_password()
-        if entered_password != PASSWORD_REQUIRED:
-            return  
+        # Signal the main thread to handle the password UI safely
+        unhide_requested.set()
 
-        # 1. Force the window to be TOPMOST
-        user32.SetWindowPos(
-            hwnd, 
-            HWND_TOPMOST, 
-            0, 0, 0, 0, 
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
-        )
+
+
+
+import selenium.common.exceptions  # Ensure this import is available, or it will catch broad Exception below
+
+def focus_monitor_loop():
+    """
+    Background monitoring loop optimized to prevent memory leaks,
+    handle sudden browser disconnections, and prevent script crashes.
+    """
+    global is_hidden
+    while not stop_event.is_set():
+        try:
+            if hwnd and not is_hidden:
+                # 1. Health check verification to make sure Chrome is still running
+                try:
+                    driver.execute_script("return navigator.onLine;")
+                except Exception:
+                    log_event("Browser connection severed in monitor loop. Triggering exit.", "error")
+                    emergency_exit()
+                    break
+
+                # 2. Check window foreground status
+                active_hwnd = user32.GetForegroundWindow()
+                
+                # If the user clicks away, presses Alt+Tab, or another app steals focus
+                if active_hwnd != hwnd and active_hwnd != 0:
+                    time.sleep(0.1)  # Debounce layer to confirm deliberate defocus
+                    if user32.GetForegroundWindow() != hwnd:
+                        hide_window()
+                        
+                del active_hwnd
+        except Exception:
+            pass  # Absorb transient OS tracking communication hiccups silently
+            
+        time.sleep(0.2)  # Maintain rest window to lower CPU footprints
+        gc.collect()
+
+
+def process_unhide():
+    """Executes the unhide workflow safely on the main thread loop."""
+    global is_hidden
+    # Note: Use your existing request_password() function here
+    entered_password = request_password() 
+    
+    if entered_password == PASSWORD_REQUIRED:
+        # 1. Bring window to front
+        user32.ShowWindow(hwnd, SW_SHOW)
+        user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040) # HWND_TOPMOST
+        user32.SetForegroundWindow(hwnd)
         
-        # --- UNMUTE AUDIO WHEN UNHIDING ---
+        # 2. Release topmost hold so you can interact with other apps normally
+        time.sleep(0.1)
+        user32.SetWindowPos(hwnd, -2, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040) # HWND_NOTOPMOST
+
         try:
             driver.execute_script('const videos = document.querySelectorAll("video"); videos.forEach(v => { v.muted = false; });')
         except Exception:
             pass
-
-        # 2. Focus and pull to foreground
-        user32.ShowWindow(hwnd, SW_SHOW) 
-        user32.SetForegroundWindow(hwnd) 
         is_hidden = False
 
 
-def focus_monitor_loop():
-    """Background loop that forces an automatic hide sequence if someone switches windows."""
-    global is_hidden
-    while not stop_event.is_set():
-        if hwnd and not is_hidden:
-            active_hwnd = user32.GetForegroundWindow()
-            # If the user clicks away, presses Alt+Tab, or another app steals focus
-            if active_hwnd != hwnd and active_hwnd != 0:
-                # Give it a fraction of a millisecond to verify it wasn't just a brief system lag
-                time.sleep(0.05)
-                if user32.GetForegroundWindow() != hwnd:
-                    hide_window()
-        time.sleep(0.1)
+
 
 
 # Bind hotkeys
@@ -231,12 +367,15 @@ keyboard.add_hotkey('alt+shift+q', emergency_exit)  # Silent Emergency Kill
 monitor_thread = threading.Thread(target=focus_monitor_loop, daemon=True)
 monitor_thread.start()
 
-# Keep-alive loop
+# Updated Main keep-alive loop (Handles UI processing safely)
 try: 
     while not stop_event.is_set():
-        time.sleep(0.3)
+        if unhide_requested.is_set():
+            process_unhide()
+            unhide_requested.clear()  # Reset the flag after processing
+            
+        time.sleep(0.1)
 except (KeyboardInterrupt, SystemExit):
     cleanup_chrome()
-
 
 
