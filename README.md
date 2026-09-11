@@ -19,6 +19,7 @@ Before running this utility, ensure you have Python installed and the required e
 ```bash
 pip install selenium keyboard
 ```
+*NOTE AFTER DOING EVERYTHING THAT I TOLD YOU TO MAKE SURE TO NOT ALT TAB OUT OF THE CHROME WAIT UNTIL YOU SEE THE CHROME ICON DISAPEAR!!!
 
 *Note: This script requires a working installation of Google Chrome on your system.*
 
