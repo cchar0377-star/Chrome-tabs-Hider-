@@ -43,7 +43,7 @@ py -m PyInstaller --onefile --windowed --collect-all selenium --name "Name of Fi
 
 Make sure to remove the "
 
-
+5. And then go to the dist folder and run the youtube_toggle program or whatever you named it 
 
 ## ⌨️ Control Hotkeys
 
